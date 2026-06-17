@@ -1,7 +1,4 @@
 <?php
-/**
- * Main Dashboard Page
- */
 
 session_start();
 require_once 'config/config.php';
@@ -55,7 +52,6 @@ $current_user = getCurrentUser();
     </style>
 </head>
 <body>
-    <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container-fluid">
             <a class="navbar-brand" href="index.php">
@@ -98,7 +94,6 @@ $current_user = getCurrentUser();
         </div>
     </nav>
 
-    <!-- Main Content -->
     <div class="container-fluid mt-4">
         <div class="row mb-4">
             <div class="col-12">
@@ -193,7 +188,7 @@ $current_user = getCurrentUser();
             </div>
         </div>
 
-        <!-- Quick Actions -->
+
         <div class="row mt-4 mb-4">
             <div class="col-md-6">
                 <div class="card text-center">

@@ -1,8 +1,4 @@
 <?php
-/**
- * Login Page
- * User authentication entry point
- */
 
 session_start();
 require_once 'config/config.php';
@@ -10,7 +6,7 @@ require_once 'src/classes/Database.php';
 require_once 'src/classes/Auth.php';
 require_once 'src/functions.php';
 
-// Redirect if already logged in
+
 if (isUserLoggedIn()) {
     redirect('index.php');
 }
