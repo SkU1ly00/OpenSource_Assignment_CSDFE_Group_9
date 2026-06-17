@@ -1,6 +1,7 @@
 <?php
 /**
- * Search Incidents Page
+ * Search Incidents Page (Advanced)
+ * Supports simple search by incident ID and advanced filters
  */
 
 session_start();
@@ -17,17 +18,49 @@ if (!isUserLoggedIn()) {
 $db = new Database();
 $db->connect();
 
+// Fetch filter options
+$db->prepare('SELECT id, type_name FROM incident_types ORDER BY type_name');
+$incident_types = $db->resultSet();
+
+$db->prepare('SELECT id, level_name FROM severity_levels ORDER BY id');
+$severity_levels = $db->resultSet();
+
+$db->prepare('SELECT id, status_name FROM incident_status ORDER BY id');
+$status_options = $db->resultSet();
+
 $search_results = [];
 $search_performed = false;
 
+$incident = new Incident();
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' || (isset($_GET['q']) && !empty($_GET['q']))) {
-    $search_term = sanitizeInput($_GET['q'] ?? $_POST['search_term'] ?? '');
-    
-    if (!empty($search_term)) {
-        $incident = new Incident();
-        $search_results = $incident->searchIncidentById($search_term);
-        $search_performed = true;
+    // Build filters
+    $filters = [];
+    $simple_query = sanitizeInput($_GET['q'] ?? $_POST['search_term'] ?? '');
+
+    $filters['incident_id'] = $simple_query;
+    $filters['incident_type_id'] = !empty($_POST['incident_type_id']) ? intval($_POST['incident_type_id']) : null;
+    $filters['severity_id'] = !empty($_POST['severity_id']) ? intval($_POST['severity_id']) : null;
+    $filters['status_id'] = !empty($_POST['status_id']) ? intval($_POST['status_id']) : null;
+    $filters['start_date'] = !empty($_POST['start_date']) ? sanitizeInput($_POST['start_date']) : null;
+    $filters['end_date'] = !empty($_POST['end_date']) ? sanitizeInput($_POST['end_date']) : null;
+
+    // Determine if any advanced filter is set
+    $advanced_set = false;
+    foreach (['incident_type_id','severity_id','status_id','start_date','end_date'] as $f) {
+        if (!empty($filters[$f])) { $advanced_set = true; break; }
     }
+
+    if ($advanced_set) {
+        $search_results = $incident->searchIncidents($filters);
+    } else {
+        // Simple search by incident id
+        if (!empty($simple_query)) {
+            $search_results = $incident->searchIncidentById($simple_query);
+        }
+    }
+
+    $search_performed = true;
 }
 
 $current_user = getCurrentUser();
@@ -44,6 +77,7 @@ $current_user = getCurrentUser();
     <style>
         body { background-color: #f8f9fa; }
         .navbar { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .advanced-filters { display: none; }
     </style>
 </head>
 <body>
@@ -89,21 +123,67 @@ $current_user = getCurrentUser();
         <div class="row mb-4">
             <div class="col-12">
                 <h2><i class="bi bi-search"></i> Search Incidents</h2>
-                <p class="text-muted">Search incidents by incident ID</p>
+                <p class="text-muted">Search incidents by incident ID or use advanced filters</p>
             </div>
         </div>
 
         <div class="card mb-4">
             <div class="card-body">
                 <form method="POST" action="search.php" class="row g-3">
-                    <div class="col-12 col-md-8">
-                        <input type="text" class="form-control form-control-lg" name="search_term" placeholder="Enter Incident ID (e.g., INC...)" required>
+                    <div class="col-12 col-md-6">
+                        <input type="text" class="form-control form-control-lg" name="search_term" placeholder="Enter Incident ID (e.g., INC...)" value="<?php echo htmlspecialchars($_POST['search_term'] ?? $_GET['q'] ?? ''); ?>">
                     </div>
-                    <div class="col-12 col-md-4">
+                    <div class="col-12 col-md-2">
                         <button type="submit" class="btn btn-primary btn-lg w-100">
                             <i class="bi bi-search"></i> Search
                         </button>
                     </div>
+                    <div class="col-12 col-md-4 text-end">
+                        <a href="#" id="toggleAdvanced" class="btn btn-outline-secondary">Advanced Filters</a>
+                    </div>
+
+                    <div class="col-12 advanced-filters mt-3">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Incident Type</label>
+                                <select name="incident_type_id" class="form-select">
+                                    <option value="">Any</option>
+                                    <?php foreach ($incident_types as $t): ?>
+                                        <option value="<?php echo $t['id']; ?>" <?php echo (isset($_POST['incident_type_id']) && $_POST['incident_type_id'] == $t['id']) ? 'selected' : ''; ?>><?php echo htmlspecialchars($t['type_name']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Severity</label>
+                                <select name="severity_id" class="form-select">
+                                    <option value="">Any</option>
+                                    <?php foreach ($severity_levels as $s): ?>
+                                        <option value="<?php echo $s['id']; ?>" <?php echo (isset($_POST['severity_id']) && $_POST['severity_id'] == $s['id']) ? 'selected' : ''; ?>><?php echo htmlspecialchars($s['level_name']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Status</label>
+                                <select name="status_id" class="form-select">
+                                    <option value="">Any</option>
+                                    <?php foreach ($status_options as $st): ?>
+                                        <option value="<?php echo $st['id']; ?>" <?php echo (isset($_POST['status_id']) && $_POST['status_id'] == $st['id']) ? 'selected' : ''; ?>><?php echo htmlspecialchars($st['status_name']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label">Start Date</label>
+                                <input type="date" name="start_date" class="form-control" value="<?php echo htmlspecialchars($_POST['start_date'] ?? ''); ?>">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">End Date</label>
+                                <input type="date" name="end_date" class="form-control" value="<?php echo htmlspecialchars($_POST['end_date'] ?? ''); ?>">
+                            </div>
+
+                        </div>
+                    </div>
+
                 </form>
             </div>
         </div>
@@ -164,5 +244,28 @@ $current_user = getCurrentUser();
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('toggleAdvanced').addEventListener('click', function(e) {
+            e.preventDefault();
+            const adv = document.querySelector('.advanced-filters');
+            if (adv.style.display === 'none' || adv.style.display === '') {
+                adv.style.display = 'block';
+                this.textContent = 'Hide Filters';
+            } else {
+                adv.style.display = 'none';
+                this.textContent = 'Advanced Filters';
+            }
+        });
+
+        // If any advanced filter value is present, open the panel
+        window.addEventListener('DOMContentLoaded', function() {
+            const adv = document.querySelector('.advanced-filters');
+            const anySet = <?php echo json_encode((bool) (!empty($_POST['incident_type_id']) || !empty($_POST['severity_id']) || !empty($_POST['status_id']) || !empty($_POST['start_date']) || !empty($_POST['end_date']))); ?>;
+            if (anySet) {
+                adv.style.display = 'block';
+                document.getElementById('toggleAdvanced').textContent = 'Hide Filters';
+            }
+        });
+    </script>
 </body>
 </html>
